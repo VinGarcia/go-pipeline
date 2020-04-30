@@ -25,15 +25,23 @@ func main() {
 			}),
 		),
 
+		// Fan-out with 2 tasks:
 		pipeline.NewStage("dedup",
 			pipeline.NewTask(func(job interface{}) (interface{}, error) {
 				fmt.Println("deduping", job)
 				return job.(string) + " deduped", nil
 			}),
+			pipeline.NewTask(func(job interface{}) (interface{}, error) {
+				fmt.Println("saving to db", job)
+				return nil, nil
+			}),
 		),
 
 		pipeline.NewStage("rate-control",
-			pipeline.NewTask(func(job interface{}) (interface{}, error) {
+			pipeline.NewTask(func(jobs interface{}) (interface{}, error) {
+				// Since the last stage was a fan-out, in this stage we receive
+				// multiple return values. In this case we'll only use the first one:
+				job := jobs.([]interface{})[0].(string)
 
 				<-limiter
 

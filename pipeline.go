@@ -1,4 +1,4 @@
-package pipe
+package pipeline
 
 import (
 	"context"
@@ -29,27 +29,35 @@ func (p Pipeline) Start() error {
 func (p Pipeline) StartWithContext(ctx context.Context) error {
 	p.started = true
 
+	var nextInputCh chan interface{}
 	var g errgroup.Group
 
-	inputCh := make(chan interface{})
-	// This initial channel is closed so all
-	// attempts to read return nil but doesn't block:
-	close(inputCh)
+	for i := range p.stages {
+		sIdx := i
+		stage := p.stages[i]
 
-	for sIdx, stage := range p.stages {
+		// nil on the first iteration:
+		stage.inputCh = nextInputCh
 
 		// Fan-out:
 		g.Go(func() error {
 			for {
-				job := <-inputCh
-				for _, task := range stage.tasks {
+				var job interface{}
+				if stage.inputCh != nil {
+					job = <-stage.inputCh
+				}
+
+				for i := range stage.tasks {
+					task := stage.tasks[i]
 					task.inputCh <- job
 				}
 			}
 		})
 
 		// Tasks:
-		for _, task := range stage.tasks {
+		for i := range stage.tasks {
+			task := stage.tasks[i]
+
 			g.Go(func() error {
 				for {
 					job, err := task.worker(<-task.inputCh)
@@ -66,7 +74,8 @@ func (p Pipeline) StartWithContext(ctx context.Context) error {
 		g.Go(func() error {
 			for {
 				var jobs []interface{}
-				for _, task := range stage.tasks {
+				for i := range stage.tasks {
+					task := stage.tasks[i]
 					jobs = append(jobs, <-task.outputCh)
 				}
 
@@ -84,16 +93,17 @@ func (p Pipeline) StartWithContext(ctx context.Context) error {
 		})
 
 		// Create the input channel of the next stage:
-		inputCh = make(chan interface{})
+		nextInputCh = stage.outputCh
 	}
 
-	return nil
+	return g.Wait()
 }
 
 // Stage ...
 type Stage struct {
 	name     string
 	tasks    []Task
+	inputCh  chan interface{}
 	outputCh chan interface{}
 }
 
@@ -116,12 +126,11 @@ type Task struct {
 }
 
 // NewTask ...
-func NewTask(numInstances int, worker workerType) Task {
+func NewTask(worker workerType) Task {
 	return Task{
-		instances: numInstances,
-		worker:    worker,
-		inputCh:   make(chan interface{}, 1),
-		outputCh:  make(chan interface{}),
+		worker:   worker,
+		inputCh:  make(chan interface{}),
+		outputCh: make(chan interface{}),
 	}
 }
 

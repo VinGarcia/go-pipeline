@@ -8,16 +8,23 @@ import (
 )
 
 func main() {
-	limiter := time.Tick(time.Second / 10)
-	c := 0
+	limiter := time.Tick(time.Second / 4)
+
+	msgCounter := 0
+	msgGenerator := func() string {
+		msgCounter++
+		return fmt.Sprint("message ", msgCounter)
+	}
+
+	startTime := time.Now()
+	jobsProcessed := 0
 
 	pipeline := pipeline.New(
-		pipeline.NewStage("loading",
+		pipeline.NewStage("loading", 1,
 			pipeline.NewTask(func(_ interface{}) (interface{}, error) {
-				time.Sleep(1 * time.Second)
+				time.Sleep(100 * time.Millisecond)
 
-				c++
-				job := fmt.Sprint("message ", c)
+				job := msgGenerator()
 
 				fmt.Println("loading", job)
 
@@ -26,18 +33,19 @@ func main() {
 		),
 
 		// Fan-out with 2 tasks:
-		pipeline.NewStage("dedup",
+		pipeline.NewStage("dedup", 1,
 			pipeline.NewTask(func(job interface{}) (interface{}, error) {
 				fmt.Println("deduping", job)
 				return job.(string) + " deduped", nil
 			}),
+
 			pipeline.NewTask(func(job interface{}) (interface{}, error) {
 				fmt.Println("saving to db", job)
 				return nil, nil
 			}),
 		),
 
-		pipeline.NewStage("rate-control",
+		pipeline.NewStage("rate-control", 1,
 			pipeline.NewTask(func(jobs interface{}) (interface{}, error) {
 				// Since the last stage was a fan-out, in this stage we receive
 				// multiple return values. In this case we'll only use the first one:
@@ -47,13 +55,22 @@ func main() {
 
 				fmt.Println("rate-controlling", job)
 
+				if time.Since(startTime) > 2*time.Second {
+					fmt.Println()
+					fmt.Printf("Processing rate: %f\n", float64(jobsProcessed)/time.Since(startTime).Seconds())
+					fmt.Println()
+					startTime = time.Now()
+					jobsProcessed = 0
+				}
+				jobsProcessed++
+
 				return job, nil
 			}),
 		),
 
-		pipeline.NewStage("sending",
+		pipeline.NewStage("sending", 3,
 			pipeline.NewTask(func(job interface{}) (interface{}, error) {
-				time.Sleep(3 * time.Second)
+				time.Sleep(300 * time.Millisecond)
 
 				fmt.Printf("Sending message `%s`\n", job.(string))
 

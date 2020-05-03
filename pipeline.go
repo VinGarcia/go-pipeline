@@ -7,6 +7,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type NumWorkers int
+
 // Pipeline ...
 type Pipeline struct {
 	stages []Stage
@@ -74,7 +76,7 @@ func (p Pipeline) StartWithContext(ctx context.Context) error {
 		for i := range stage.tasks {
 			task := &stage.tasks[i]
 
-			for j := 0; j < stage.workersPerTask; j++ {
+			for j := 0; j < int(stage.workersPerTask); j++ {
 				workerIdx := j
 				g.Go(func() error {
 					for {
@@ -132,7 +134,7 @@ func (p Pipeline) debugPrintf(format string, args ...interface{}) {
 // Stage ...
 type Stage struct {
 	name           string
-	workersPerTask int
+	workersPerTask NumWorkers
 	tasks          []Task
 
 	inputCh  chan interface{}
@@ -140,7 +142,7 @@ type Stage struct {
 }
 
 // NewStage ...
-func NewStage(name string, workersPerTask int, tasks ...Task) Stage {
+func NewStage(name string, workersPerTask NumWorkers, tasks ...Task) Stage {
 	// Ignore nonsence arguments
 	// so we don't have to return error:
 	if workersPerTask < 1 {

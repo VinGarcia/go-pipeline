@@ -20,7 +20,7 @@ func main() {
 	jobsProcessed := 0
 
 	pipeline := pipeline.New(
-		pipeline.NewStage("loading", 1,
+		pipeline.NewStage("loading", pipeline.NumWorkers(1),
 			pipeline.NewTask(func(_ interface{}) (interface{}, error) {
 				time.Sleep(100 * time.Millisecond)
 
@@ -33,7 +33,7 @@ func main() {
 		),
 
 		// Fan-out with 2 tasks:
-		pipeline.NewStage("dedup", 1,
+		pipeline.NewStage("dedup", pipeline.NumWorkers(1),
 			pipeline.NewTask(func(job interface{}) (interface{}, error) {
 				fmt.Println("deduping", job)
 				return job.(string) + " deduped", nil
@@ -45,7 +45,7 @@ func main() {
 			}),
 		),
 
-		pipeline.NewStage("rate-control", 1,
+		pipeline.NewStage("rate-control", pipeline.NumWorkers(1),
 			pipeline.NewTask(func(jobs interface{}) (interface{}, error) {
 				// Since the last stage was a fan-out, in this stage we receive
 				// multiple return values. In this case we'll only use the first one:
@@ -68,7 +68,7 @@ func main() {
 			}),
 		),
 
-		pipeline.NewStage("sending", 3,
+		pipeline.NewStage("sending", pipeline.NumWorkers(3),
 			pipeline.NewTask(func(job interface{}) (interface{}, error) {
 				time.Sleep(300 * time.Millisecond)
 

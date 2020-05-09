@@ -4,12 +4,20 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/vingarcia/go-pipeline/fanouter"
 	"golang.org/x/sync/errgroup"
 )
 
-type NumWorkers int
+// TaskForce is used to describe the number
+// of workers per task a given stage should use
+type TaskForce int
 
-// Pipeline ...
+// Pipeline organizes several goroutines to process a
+// number of user defined tasks in the form of a pipeline.
+//
+// Each stage of this pipeline processes the jobs serially
+// and when there are multiple tasks on a single stage they
+// process jobs concurrently
 type Pipeline struct {
 	stages []Stage
 
@@ -26,53 +34,26 @@ func New(stages ...Stage) Pipeline {
 
 // Start ...
 func (p Pipeline) Start() error {
-	return p.StartWithContext(context.Background())
+	return p.StartWithContext(context.TODO())
 }
 
 // StartWithContext ...
 func (p Pipeline) StartWithContext(ctx context.Context) error {
-	p.started = true
-
 	var nextInputCh chan interface{}
 	var g errgroup.Group
 
-	// Prepare input & output channels:
 	for i := range p.stages {
-		stage := &p.stages[i]
-		stage.outputCh = make(chan interface{}, stage.numWorkersPerTask)
-	}
-
-	for i := range p.stages {
-		sIdx := i
 		stage := &p.stages[i]
 
 		// nil on the first iteration:
 		stage.inputCh = nextInputCh
 
 		for j := 0; j < int(stage.numWorkersPerTask); j++ {
-			g.Go(func() error {
-				for {
-					p.debugPrintf("stage %d reading from %v\n", sIdx, stage.inputCh)
-
-					var input interface{}
-					if stage.inputCh != nil {
-						input = <-stage.inputCh
-					}
-
-					job, err := stage.worker(input)
-					if err != nil {
-						return err
-					}
-
-					// The last stage doesn't write anything
-					if sIdx == len(p.stages)-1 {
-						continue
-					}
-
-					p.debugPrintf("stage %d writing to %v\n", sIdx, stage.outputCh)
-					stage.outputCh <- job
-				}
-			})
+			if len(stage.tasks) == 1 {
+				g.Go(p.stageWorker(ctx, i, stage, stage.inputCh))
+			} else {
+				g.Go(p.stageFanoutWorker(ctx, i, stage, stage.inputCh))
+			}
 		}
 
 		// Create the input channel of the next stage:
@@ -82,24 +63,19 @@ func (p Pipeline) StartWithContext(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (p Pipeline) debugPrintf(format string, args ...interface{}) {
-	if p.Debug {
-		fmt.Printf(format, args...)
-	}
-}
-
 // Stage ...
 type Stage struct {
-	name              string
-	numWorkersPerTask NumWorkers
-	worker            workerType
+	name  string
+	tasks []fanouter.TaskType
 
 	inputCh  chan interface{}
 	outputCh chan interface{}
+
+	numWorkersPerTask TaskForce
 }
 
 // NewStage ...
-func NewStage(name string, numWorkersPerTask NumWorkers, worker workerType) Stage {
+func NewStage(name string, numWorkersPerTask TaskForce, task fanouter.TaskType) Stage {
 	// Ignore nonsence arguments
 	// so we don't have to return error:
 	if numWorkersPerTask < 1 {
@@ -109,8 +85,91 @@ func NewStage(name string, numWorkersPerTask NumWorkers, worker workerType) Stag
 	return Stage{
 		name:              name,
 		numWorkersPerTask: numWorkersPerTask,
-		worker:            worker,
+		tasks:             []fanouter.TaskType{task},
+		outputCh:          make(chan interface{}, numWorkersPerTask),
 	}
 }
 
-type workerType func(job interface{}) (interface{}, error)
+// NewFanoutStage ...
+func NewFanoutStage(name string, numWorkersPerTask TaskForce, tasks ...fanouter.TaskType) Stage {
+	// Ignore nonsence arguments
+	// so we don't have to return error:
+	if numWorkersPerTask < 1 {
+		numWorkersPerTask = 1
+	}
+
+	return Stage{
+		name:              name,
+		numWorkersPerTask: numWorkersPerTask,
+		tasks:             tasks,
+	}
+}
+
+func (p Pipeline) stageWorker(
+	ctx context.Context,
+	stageIdx int,
+	stage *Stage,
+	inputCh chan interface{},
+) func() error {
+	return func() error {
+		var job interface{}
+		for {
+			p.debugPrintf("stage `%s` (n%d) reading from %v\n", stage.name, stageIdx, stage.inputCh)
+
+			if stageIdx > 0 {
+				job = <-stage.inputCh
+			}
+
+			resp, err := stage.tasks[0](job)
+			if err != nil {
+				return err
+			}
+
+			// The last stage doesn't write anything
+			if stageIdx == len(p.stages)-1 {
+				continue
+			}
+
+			p.debugPrintf("stage `%s` (n%d) writing to %v\n", stage.name, stageIdx, stage.outputCh)
+			stage.outputCh <- resp
+		}
+	}
+}
+
+func (p Pipeline) stageFanoutWorker(
+	ctx context.Context,
+	stageIdx int,
+	stage *Stage,
+	inputCh chan interface{},
+) func() error {
+	return func() error {
+		var job interface{}
+		var fan = fanouter.New(ctx, stage.tasks...)
+		for {
+			p.debugPrintf("stage `%s` (n%d) reading from %v\n", stage.name, stageIdx, stage.inputCh)
+
+			if stageIdx > 0 {
+				job = <-stage.inputCh
+			}
+
+			resps, err := fan.Fanout(job)
+			if err != nil {
+				return err
+			}
+
+			// The last stage doesn't write anything
+			if stageIdx == len(p.stages)-1 {
+				continue
+			}
+
+			p.debugPrintf("stage `%s` (n%d) writing to %v\n", stage.name, stageIdx, stage.outputCh)
+			stage.outputCh <- resps
+		}
+	}
+}
+
+func (p Pipeline) debugPrintf(format string, args ...interface{}) {
+	if p.Debug {
+		fmt.Printf(format, args...)
+	}
+}

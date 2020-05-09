@@ -78,6 +78,7 @@ func fanoutWorker(
 			}
 
 			batch := make(chan fanJob, len(tasks))
+			batchesCh <- batch
 			for i := range tasks {
 				task := tasks[i]
 				taskIdx := i
@@ -96,8 +97,6 @@ func fanoutWorker(
 				})
 			}
 		}
-
-		return nil
 	}
 }
 

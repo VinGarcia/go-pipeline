@@ -63,7 +63,14 @@ func (p Pipeline) StartWithContext(ctx context.Context) error {
 			case FanoutStage:
 				fan := fanouter.New(ctx, stage.tasks...)
 				g.Go(stage.stageWorker(ctx, idx, p, inputCh, outputCh, func(job interface{}) (interface{}, error) {
-					return fan.Fanout(job)
+					p.debugPrintf("stage `%s` (n%d) FANNING-OUT\n", stage.name, idx)
+					jobs, err := fan.Fanout(job)
+					if err != nil {
+						return nil, err
+					}
+
+					p.debugPrintf("stage `%s` (n%d) FANNING-IN\n", stage.name, idx)
+					return stage.fanin(jobs)
 				}))
 			}
 		}

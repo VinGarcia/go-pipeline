@@ -29,8 +29,6 @@ type StageT struct {
 	tasks []async.Task
 	fanin func(results []interface{}) (interface{}, error)
 
-	outputCh chan interface{}
-
 	numWorkersPerTask async.TaskForce
 }
 
@@ -60,7 +58,6 @@ func NewStage(name string, numWorkersPerTask async.TaskForce, task async.Task) S
 		numWorkersPerTask: numWorkersPerTask,
 		tasks:             []async.Task{task},
 		fanin:             defaultFanin,
-		outputCh:          make(chan interface{}, numWorkersPerTask),
 	}
 }
 
@@ -93,9 +90,8 @@ func (stage StageT) stageWorker(
 	return func() error {
 		var job interface{}
 		for {
-			pipe.debugPrintf("stage `%s` (n%d) reading from %v\n", stage.name, stageIdx, inputCh)
-
 			if stageIdx > 0 {
+				pipe.debugPrintf("stage `%s` (n%d) reading from %v\n", stage.name, stageIdx, inputCh)
 				job = <-inputCh
 			}
 
@@ -109,8 +105,8 @@ func (stage StageT) stageWorker(
 				continue
 			}
 
-			pipe.debugPrintf("stage `%s` (n%d) writing to %v\n", stage.name, stageIdx, stage.outputCh)
-			stage.outputCh <- resp
+			pipe.debugPrintf("stage `%s` (n%d) writing to %v\n", stage.name, stageIdx, outputCh)
+			outputCh <- resp
 		}
 	}
 }

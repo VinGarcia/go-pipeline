@@ -11,55 +11,85 @@ import (
 // Each stage of the pipeline processes the jobs serially
 // and when there are multiple tasks on a single stage they
 // process jobs concurrently among them
-type Stage struct {
+type Stage interface {
+	stageWorker(
+		ctx context.Context,
+		stageIdx int,
+		pipe Pipeline,
+		inputCh chan interface{},
+		outputCh chan interface{},
+		task async.Task,
+	) func() error
+
+	NumWorkersPerTask() int
+}
+
+type StageT struct {
 	name  string
 	tasks []async.Task
+	fanin func(results []interface{}) (interface{}, error)
 
 	outputCh chan interface{}
 
 	numWorkersPerTask async.TaskForce
 }
 
+func (s StageT) NumWorkersPerTask() int {
+	return int(s.numWorkersPerTask)
+}
+
+type FanoutStage struct {
+	StageT
+}
+
+func (f FanoutStage) FaninRule(fanin func(results []interface{}) (interface{}, error)) FanoutStage {
+	f.fanin = fanin
+	return f
+}
+
 // NewStage instantiates a new Stage with a single task and `numWorkersPerTask` goroutines
-func NewStage(name string, numWorkersPerTask async.TaskForce, task async.Task) Stage {
+func NewStage(name string, numWorkersPerTask async.TaskForce, task async.Task) StageT {
 	// Ignore nonsence arguments
 	// so we don't have to return error:
 	if numWorkersPerTask < 1 {
 		numWorkersPerTask = 1
 	}
 
-	return Stage{
+	return StageT{
 		name:              name,
 		numWorkersPerTask: numWorkersPerTask,
 		tasks:             []async.Task{task},
+		fanin:             defaultFanin,
 		outputCh:          make(chan interface{}, numWorkersPerTask),
 	}
 }
 
 // NewFanoutStage instantiates a new Stage with a multiple
 // tasks each running on `numWorkersPerTask` goroutines
-func NewFanoutStage(name string, numWorkersPerTask async.TaskForce, tasks ...async.Task) Stage {
+func NewFanoutStage(name string, numWorkersPerTask async.TaskForce, tasks ...async.Task) FanoutStage {
 	// Ignore nonsence arguments
 	// so we don't have to return error:
 	if numWorkersPerTask < 1 {
 		numWorkersPerTask = 1
 	}
 
-	return Stage{
-		name:              name,
-		numWorkersPerTask: numWorkersPerTask,
-		tasks:             tasks,
+	return FanoutStage{
+		StageT{
+			name:              name,
+			numWorkersPerTask: numWorkersPerTask,
+			tasks:             tasks,
+		},
 	}
 }
 
-func stageWorker(
+func (stage StageT) stageWorker(
 	ctx context.Context,
 	stageIdx int,
 	pipe Pipeline,
 	inputCh chan interface{},
+	outputCh chan interface{},
 	task async.Task,
 ) func() error {
-	stage := &pipe.stages[stageIdx]
 	return func() error {
 		var job interface{}
 		for {
@@ -83,4 +113,8 @@ func stageWorker(
 			stage.outputCh <- resp
 		}
 	}
+}
+
+func defaultFanin(results []interface{}) (interface{}, error) {
+	return results, nil
 }

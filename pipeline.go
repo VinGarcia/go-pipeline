@@ -50,25 +50,26 @@ func (p Pipeline) StartWithContext(ctx context.Context) error {
 	var g errgroup.Group
 
 	for idx := range p.stages {
-		stage := &p.stages[idx]
+		stage := p.stages[idx]
 
 		// nil on the first iteration:
 		inputCh := nextInputCh
+		outputCh := make(chan interface{})
 
-		for j := 0; j < int(stage.numWorkersPerTask); j++ {
-			if len(stage.tasks) == 1 {
-				g.Go(stageWorker(ctx, idx, p, inputCh, stage.tasks[0]))
-				continue
+		for j := 0; j < int(stage.NumWorkersPerTask()); j++ {
+			switch stage := stage.(type) {
+			case StageT:
+				g.Go(stage.stageWorker(ctx, idx, p, inputCh, outputCh, stage.tasks[0]))
+			case FanoutStage:
+				fan := fanouter.New(ctx, stage.tasks...)
+				g.Go(stage.stageWorker(ctx, idx, p, inputCh, outputCh, func(job interface{}) (interface{}, error) {
+					return fan.Fanout(job)
+				}))
 			}
-
-			fan := fanouter.New(ctx, stage.tasks...)
-			g.Go(stageWorker(ctx, idx, p, inputCh, func(job interface{}) (interface{}, error) {
-				return fan.Fanout(job)
-			}))
 		}
 
 		// Create the input channel of the next stage:
-		nextInputCh = stage.outputCh
+		nextInputCh = outputCh
 	}
 
 	return g.Wait()

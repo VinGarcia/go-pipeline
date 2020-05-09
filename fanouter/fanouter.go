@@ -3,11 +3,9 @@ package fanouter
 import (
 	"context"
 
+	"github.com/vingarcia/go-pipeline/async"
 	"github.com/vingarcia/go-pipeline/workerpool"
 )
-
-// TaskType describes one task that must be performed during the fanout
-type TaskType func(job interface{}) (interface{}, error)
 
 // Fan holds a set of workers that run concurrently
 // to process a single job everytime the Fanout() function is called.
@@ -24,7 +22,7 @@ type Fan struct {
 }
 
 // New creates a new Fan instance
-func New(ctx context.Context, tasks ...TaskType) Fan {
+func New(ctx context.Context, tasks ...async.Task) Fan {
 	f := Fan{
 		ctx:       ctx,
 		jobs:      make(chan interface{}),
@@ -68,7 +66,7 @@ func fanoutWorker(
 	ctx context.Context,
 	jobs chan interface{},
 	batchesCh chan chan fanJob,
-	tasks []TaskType,
+	tasks []async.Task,
 	pool *workerpool.WorkerPool,
 ) func() error {
 	return func() error {

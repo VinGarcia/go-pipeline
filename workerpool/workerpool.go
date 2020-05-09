@@ -6,23 +6,25 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type WorkRequest func() error
+type workRequest func() error
 
+// WorkerPool ...
 type WorkerPool struct {
 	numWorkers int
-	requests   chan WorkRequest
+	requests   chan workRequest
 	err        error
 
 	cancelAll func()
 	group     *errgroup.Group
 }
 
+// NewWorkerPool ...
 func NewWorkerPool(ctx context.Context, numWorkers int) *WorkerPool {
 	ctx, cancel := context.WithCancel(ctx)
 	g, ctx := errgroup.WithContext(ctx)
 
 	pool := WorkerPool{
-		requests:  make(chan WorkRequest),
+		requests:  make(chan workRequest),
 		err:       nil,
 		cancelAll: cancel,
 		group:     g,
@@ -40,6 +42,7 @@ func NewWorkerPool(ctx context.Context, numWorkers int) *WorkerPool {
 	return &pool
 }
 
+// AddWorkers ...
 func (pool WorkerPool) AddWorkers(numWorkers int) {
 	pool.numWorkers += numWorkers
 	for i := 0; i < numWorkers; i++ {
@@ -58,14 +61,17 @@ func (pool WorkerPool) AddWorkers(numWorkers int) {
 	}
 }
 
+// NumWorkers ...
 func (pool WorkerPool) NumWorkers() int {
 	return pool.numWorkers
 }
 
+// Go ...
 func (pool WorkerPool) Go(work func() error) {
 	pool.requests <- work
 }
 
+// Wait ...
 func (pool WorkerPool) Wait() error {
 	return pool.group.Wait()
 }

@@ -1,29 +1,3 @@
-## Simple Go Pipeline
-
-This implementation allows you to worry about what each stage does
-instead of worrying about how to sincronize them.
-
-The abstraction contains 3 layers:
-
-1. The Pipeline itself
-2. The Stages of the pipeline that run in serial order
-3. The Tasks of each Stage, that allows a single stage to run several tasks in parallel
-
-There are 2 types of stages:
-
-1. Stages with a single Task
-2. Stages with more than 1 Task
-
-For stages with one task the return value of this Task is always
-the input argument of the tasks on the next Stage.
-
-For stages with multiple tasks, the return value of all these tasks
-are unified into a list of type `[]interface{}`.
-This list is then provided as input for the tasks of the next stage.
-
-## Usage Example
-
-```Go
 package main
 
 import (
@@ -100,4 +74,3 @@ func main() {
 
 	return
 }
-```

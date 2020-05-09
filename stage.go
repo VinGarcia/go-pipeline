@@ -112,5 +112,5 @@ func (stage StageT) stageWorker(
 }
 
 func defaultFanin(results []interface{}) (interface{}, error) {
-	return results, nil
+	return results[0], nil
 }

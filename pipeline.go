@@ -50,10 +50,14 @@ func (p Pipeline) StartWithContext(ctx context.Context) error {
 
 		for j := 0; j < int(stage.numWorkersPerTask); j++ {
 			if len(stage.tasks) == 1 {
-				g.Go(p.stageWorker(ctx, i, stage, stage.inputCh))
-			} else {
-				g.Go(p.stageFanoutWorker(ctx, i, stage, stage.inputCh))
+				g.Go(p.stageWorker(ctx, i, stage, stage.inputCh, stage.tasks[0]))
+				continue
 			}
+
+			fan := fanouter.New(ctx, stage.tasks...)
+			g.Go(p.stageWorker(ctx, i, stage, stage.inputCh, func(job interface{}) (interface{}, error) {
+				return fan.Fanout(job)
+			}))
 		}
 
 		// Create the input channel of the next stage:
@@ -110,6 +114,7 @@ func (p Pipeline) stageWorker(
 	stageIdx int,
 	stage *Stage,
 	inputCh chan interface{},
+	task fanouter.TaskType,
 ) func() error {
 	return func() error {
 		var job interface{}
@@ -120,7 +125,7 @@ func (p Pipeline) stageWorker(
 				job = <-stage.inputCh
 			}
 
-			resp, err := stage.tasks[0](job)
+			resp, err := task(job)
 			if err != nil {
 				return err
 			}
@@ -132,38 +137,6 @@ func (p Pipeline) stageWorker(
 
 			p.debugPrintf("stage `%s` (n%d) writing to %v\n", stage.name, stageIdx, stage.outputCh)
 			stage.outputCh <- resp
-		}
-	}
-}
-
-func (p Pipeline) stageFanoutWorker(
-	ctx context.Context,
-	stageIdx int,
-	stage *Stage,
-	inputCh chan interface{},
-) func() error {
-	return func() error {
-		var job interface{}
-		var fan = fanouter.New(ctx, stage.tasks...)
-		for {
-			p.debugPrintf("stage `%s` (n%d) reading from %v\n", stage.name, stageIdx, stage.inputCh)
-
-			if stageIdx > 0 {
-				job = <-stage.inputCh
-			}
-
-			resps, err := fan.Fanout(job)
-			if err != nil {
-				return err
-			}
-
-			// The last stage doesn't write anything
-			if stageIdx == len(p.stages)-1 {
-				continue
-			}
-
-			p.debugPrintf("stage `%s` (n%d) writing to %v\n", stage.name, stageIdx, stage.outputCh)
-			stage.outputCh <- resps
 		}
 	}
 }

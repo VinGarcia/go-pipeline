@@ -74,6 +74,7 @@ func fanoutWorker(
 		for {
 			select {
 			case <-ctx.Done():
+				return nil
 			case job = <-jobs:
 			}
 
@@ -122,6 +123,5 @@ func faninWorker(
 			}
 			outputCh <- output
 		}
-		return nil
 	}
 }

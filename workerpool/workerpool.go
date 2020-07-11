@@ -8,7 +8,9 @@ import (
 
 type workRequest func() error
 
-// WorkerPool ...
+// WorkerPool manages a number of goroutines that can accept
+// jobs and perform them without allocating new goroutines
+// for each job.
 type WorkerPool struct {
 	numWorkers int
 	requests   chan workRequest
@@ -18,7 +20,8 @@ type WorkerPool struct {
 	group     *errgroup.Group
 }
 
-// NewWorkerPool ...
+// NewWorkerPool creates a new WorkerPool with numWorkers
+// goroutines ready to receive jobs
 func NewWorkerPool(ctx context.Context, numWorkers int) *WorkerPool {
 	ctx, cancel := context.WithCancel(ctx)
 	g, ctx := errgroup.WithContext(ctx)
@@ -32,7 +35,7 @@ func NewWorkerPool(ctx context.Context, numWorkers int) *WorkerPool {
 
 	pool.AddWorkers(numWorkers)
 
-	// Stop all other workers:
+	// Stop all other workers if the context is cancelled:
 	g.Go(func() error {
 		defer close(pool.requests)
 		<-ctx.Done()
@@ -42,7 +45,8 @@ func NewWorkerPool(ctx context.Context, numWorkers int) *WorkerPool {
 	return &pool
 }
 
-// AddWorkers ...
+// AddWorkers allocates numWorkers new goroutines
+// for processing incomming jobs
 func (pool WorkerPool) AddWorkers(numWorkers int) {
 	pool.numWorkers += numWorkers
 	for i := 0; i < numWorkers; i++ {
@@ -61,17 +65,28 @@ func (pool WorkerPool) AddWorkers(numWorkers int) {
 	}
 }
 
-// NumWorkers ...
+// NumWorkers returns the current number of workers
 func (pool WorkerPool) NumWorkers() int {
 	return pool.numWorkers
 }
 
-// Go ...
+// Go adds a job to the execution queue, if the job returns
+// error the entire WorkerPool starts a graceful shutdown
+// and returns the received error.
 func (pool WorkerPool) Go(work func() error) {
 	pool.requests <- work
 }
 
-// Wait ...
+// Wait blocks until an error happens on one of the jobs
+// or the WorkerPool receives a signal to shutdown either
+// by cancelling the input ctx or by calling Cancel()
 func (pool WorkerPool) Wait() error {
+	return pool.group.Wait()
+}
+
+// Close sends a signsl to stop all goroutines
+// and then wait for them to finish shutting down
+func (pool WorkerPool) Close() error {
+	pool.cancelAll()
 	return pool.group.Wait()
 }

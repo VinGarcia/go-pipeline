@@ -12,7 +12,7 @@ type Stage struct {
 	tasks []threads.Task
 	fanin func(results []interface{}) (interface{}, error)
 
-	numWorkersPerTask threads.TaskForce
+	numWorkersPerTask threads.Num
 }
 
 func (s Stage) NumWorkersPerTask() int {
@@ -51,7 +51,7 @@ func (f FanoutStage) Task() threads.Task {
 }
 
 // NewStage instantiates a new Stage with a single task and `numWorkersPerTask` goroutines
-func NewStage(name string, numWorkersPerTask threads.TaskForce, task threads.Task) Stage {
+func NewStage(name string, numWorkersPerTask threads.Num, task threads.Task) Stage {
 	// Ignore nonsence arguments
 	// so we don't have to return error:
 	if numWorkersPerTask < 1 {
@@ -68,7 +68,7 @@ func NewStage(name string, numWorkersPerTask threads.TaskForce, task threads.Tas
 
 // NewFanoutStage instantiates a new Stage with a multiple
 // tasks each running on `numWorkersPerTask` goroutines
-func NewFanoutStage(name string, numWorkersPerTask threads.TaskForce, tasks ...threads.Task) FanoutStage {
+func NewFanoutStage(name string, numWorkersPerTask threads.Num, tasks ...threads.Task) FanoutStage {
 	// Ignore nonsence arguments
 	// so we don't have to return error:
 	if numWorkersPerTask < 1 {

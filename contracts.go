@@ -9,9 +9,9 @@ import (
 // on the Fanout model
 type Task func(job interface{}) (interface{}, error)
 
-// TaskForce is used to describe the number
+// Num is used to describe the number
 // of workers that should perform a single task
-type TaskForce int
+type Num int
 
 // Pipeline interface abstracts the concept of a Pipeline
 // that blocks after starting and only returns if its

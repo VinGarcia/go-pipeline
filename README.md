@@ -33,20 +33,20 @@ import (
 	"time"
 
 	"github.com/vingarcia/go-threads"
-	"github.com/vingarcia/go-threads/async"
+	"github.com/vingarcia/go-threads/pipeline"
 )
 
 func main() {
 	i := 0
 	pipeline := pipeline.New(
-		pipeline.NewStage("coolNameForStage1", async.TaskForce(1), func(_ interface{}) (interface{}, error) {
+		pipeline.NewStage("coolNameForStage1", threads.Num(1), func(_ interface{}) (interface{}, error) {
 			// The argument of the stage 0 tasks is nil, so we ignore it  ^
 
 			i++
 			return fmt.Sprint("job ", i), nil
 		}),
 
-		pipeline.NewStage("coolNameForStage3", async.TaskForce(1), func(job interface{}) (interface{}, error) {
+		pipeline.NewStage("coolNameForStage3", threads.Num(1), func(job interface{}) (interface{}, error) {
 			// The job received is always the return value of the last stage,
 			// in this case its "new job" so cast it into a string:
 			strJob := job.(string) + ":passing by stage 3"
@@ -55,7 +55,7 @@ func main() {
 		}),
 
 		// This is a fanout stage:
-		pipeline.NewFanoutStage("myFanoutStage", async.TaskForce(1),
+		pipeline.NewFanoutStage("myFanoutStage", threads.Num(1),
 			// It has multiple tasks instead of just one:
 			func(job interface{}) (interface{}, error) {
 				return job.(string) + ":fanout task 1", nil
@@ -71,8 +71,8 @@ func main() {
 		}),
 
 		pipeline.NewStage(
-			// Since this is a very slow stage we can add extra TaskForce:
-			"verySlowStage", async.TaskForce(4),
+			// Since this is a very slow stage we can add extra Num:
+			"verySlowStage", threads.Num(4),
 			// This will create 4 workers running the task bellow,
 			// so everytime a new job arrives from the faster stages
 			// there is always a worker ready to read it:

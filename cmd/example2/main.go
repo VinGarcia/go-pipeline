@@ -22,55 +22,76 @@ func main() {
 
 	p.Debug = true
 	pipeline := p.New(
-		p.NewStage("loading", threads.Num(1), func(_ interface{}) (interface{}, error) {
-			time.Sleep(100 * time.Millisecond)
+		p.Stage{
+			Name:    "loading",
+			Threads: 1,
+			Task: func(_ interface{}) (interface{}, error) {
+				time.Sleep(100 * time.Millisecond)
 
-			job := msgGenerator()
+				job := msgGenerator()
 
-			fmt.Println("loading", job)
+				fmt.Println("loading", job)
 
-			return job, nil
-		}),
+				return job, nil
+			},
+		},
 
 		// Fan-out with 2 tasks:
-		p.NewFanoutStage("save-and-dedup", threads.Num(1),
-			func(job interface{}) (interface{}, error) {
-				fmt.Println("deduping", job)
-				return job.(string) + " deduped", nil
+		p.FanoutStage{
+			Name:           "save-and-dedup",
+			ThreadsPerTask: 1,
+
+			Tasks: []threads.Task{
+				func(job interface{}) (interface{}, error) {
+					fmt.Println("deduping", job)
+					return job.(string) + " deduped", nil
+				},
+				func(job interface{}) (interface{}, error) {
+					fmt.Println("saving-to-database", job)
+					return job.(string) + " saved", nil
+				},
 			},
-			func(job interface{}) (interface{}, error) {
-				fmt.Println("saving-to-database", job)
-				return job.(string) + " saved", nil
+
+			// Optional, the implementation below is the default
+			// implementation that would be used if this field was omitted:
+			FaninRule: func(results []interface{}) (interface{}, error) {
+				return results[0], nil
 			},
-		).FaninRule(func(results []interface{}) (interface{}, error) {
-			return results[0], nil
-		}),
+		},
 
-		p.NewStage("rate-control", threads.Num(1), func(job interface{}) (interface{}, error) {
+		p.Stage{
+			Name:    "rate-control",
+			Threads: 1,
+			Task: func(job interface{}) (interface{}, error) {
 
-			<-limiter
+				<-limiter
 
-			fmt.Println("rate-controlling", job)
+				fmt.Println("rate-controlling", job)
 
-			if time.Since(startTime) > 2*time.Second {
-				fmt.Println()
-				fmt.Printf("Processing rate: %f\n", float64(jobsProcessed)/time.Since(startTime).Seconds())
-				fmt.Println()
-				startTime = time.Now()
-				jobsProcessed = 0
-			}
-			jobsProcessed++
+				if time.Since(startTime) > 2*time.Second {
+					fmt.Println()
+					fmt.Printf("Processing rate: %f\n", float64(jobsProcessed)/time.Since(startTime).Seconds())
+					fmt.Println()
+					startTime = time.Now()
+					jobsProcessed = 0
+				}
+				jobsProcessed++
 
-			return job, nil
-		}),
+				return job, nil
+			},
+		},
 
-		p.NewStage("sending", threads.Num(3), func(job interface{}) (interface{}, error) {
-			time.Sleep(300 * time.Millisecond)
+		p.Stage{
+			Name:    "sending",
+			Threads: 3,
+			Task: func(job interface{}) (interface{}, error) {
+				time.Sleep(300 * time.Millisecond)
 
-			fmt.Printf("Sending message `%s`\n", job.(string))
+				fmt.Printf("Sending message `%s`\n", job.(string))
 
-			return nil, nil
-		}),
+				return nil, nil
+			},
+		},
 	)
 
 	err := pipeline.Start()

@@ -27,7 +27,7 @@ type Pipeline interface {
 // and when there are multiple tasks on a single stage they
 // process jobs concurrently among them
 type Stage interface {
-	Name() string
-	NumWorkersPerTask() int
-	Task() Task
+	GetName() string
+	NumThreads() int
+	GetWorker() Task
 }

@@ -8,80 +8,61 @@ import (
 )
 
 type Stage struct {
-	name  string
-	tasks []threads.Task
-	fanin func(results []interface{}) (interface{}, error)
-
-	numWorkersPerTask threads.Num
+	Name    string
+	Task    threads.Task
+	Threads int
 }
 
-func (s Stage) NumWorkersPerTask() int {
-	return int(s.numWorkersPerTask)
+func (s Stage) NumThreads() int {
+	return s.Threads
 }
 
-func (s Stage) Name() string {
-	return s.name
+func (s Stage) GetName() string {
+	return s.Name
 }
 
-func (s Stage) Task() threads.Task {
-	return s.tasks[0]
+func (s Stage) GetWorker() threads.Task {
+	return s.Task
 }
 
 type FanoutStage struct {
-	Stage
+	Name           string
+	Tasks          []threads.Task
+	ThreadsPerTask int
+	FaninRule      func(results []interface{}) (interface{}, error)
 }
 
-func (f FanoutStage) FaninRule(fanin func(results []interface{}) (interface{}, error)) FanoutStage {
-	f.fanin = fanin
-	return f
+func (f FanoutStage) NumThreads() int {
+	return f.ThreadsPerTask
 }
 
-func (f FanoutStage) Task() threads.Task {
-	fan := fanouter.New(context.TODO(), f.tasks...)
+func (f FanoutStage) GetName() string {
+	return f.Name
+}
+
+func (f FanoutStage) GetWorker() threads.Task {
+	if f.ThreadsPerTask < 1 {
+		f.ThreadsPerTask = 1
+	}
+	if f.FaninRule == nil {
+		f.FaninRule = defaultFanin
+	}
+
+	fan := fanouter.New(context.TODO(), f.Tasks...)
 	return func(job interface{}) (interface{}, error) {
-		debugPrintf("stage `%s` FANNING-OUT\n", f.name)
+		debugPrintf("stage `%s` FANNING-OUT\n", f.Name)
 		jobs, err := fan.Fanout(job)
 		if err != nil {
 			return nil, err
 		}
 
-		debugPrintf("stage `%s` FANNING-IN\n", f.name)
-		return f.fanin(jobs)
+		debugPrintf("stage `%s` FANNING-IN\n", f.Name)
+		return f.FaninRule(jobs)
 	}
 }
 
-// NewStage instantiates a new Stage with a single task and `numWorkersPerTask` goroutines
-func NewStage(name string, numWorkersPerTask threads.Num, task threads.Task) Stage {
-	// Ignore nonsence arguments
-	// so we don't have to return error:
-	if numWorkersPerTask < 1 {
-		numWorkersPerTask = 1
-	}
-
-	return Stage{
-		name:              name,
-		numWorkersPerTask: numWorkersPerTask,
-		tasks:             []threads.Task{task},
-		fanin:             defaultFanin,
-	}
-}
-
-// NewFanoutStage instantiates a new Stage with a multiple
-// tasks each running on `numWorkersPerTask` goroutines
-func NewFanoutStage(name string, numWorkersPerTask threads.Num, tasks ...threads.Task) FanoutStage {
-	// Ignore nonsence arguments
-	// so we don't have to return error:
-	if numWorkersPerTask < 1 {
-		numWorkersPerTask = 1
-	}
-
-	return FanoutStage{
-		Stage{
-			name:              name,
-			numWorkersPerTask: numWorkersPerTask,
-			tasks:             tasks,
-		},
-	}
+func defaultFanin(results []interface{}) (interface{}, error) {
+	return results[0], nil
 }
 
 func buildStageWorker(
@@ -111,8 +92,4 @@ func buildStageWorker(
 			}
 		}
 	}
-}
-
-func defaultFanin(results []interface{}) (interface{}, error) {
-	return results[0], nil
 }

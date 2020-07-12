@@ -3,16 +3,16 @@ package pipeline
 import (
 	"context"
 
-	thread "github.com/vingarcia/go-pipeline"
-	"github.com/vingarcia/go-pipeline/fanouter"
+	"github.com/vingarcia/go-threads"
+	"github.com/vingarcia/go-threads/fanouter"
 )
 
 type Stage struct {
 	name  string
-	tasks []thread.Task
+	tasks []threads.Task
 	fanin func(results []interface{}) (interface{}, error)
 
-	numWorkersPerTask thread.TaskForce
+	numWorkersPerTask threads.TaskForce
 }
 
 func (s Stage) NumWorkersPerTask() int {
@@ -23,7 +23,7 @@ func (s Stage) Name() string {
 	return s.name
 }
 
-func (s Stage) Task() thread.Task {
+func (s Stage) Task() threads.Task {
 	return s.tasks[0]
 }
 
@@ -36,7 +36,7 @@ func (f FanoutStage) FaninRule(fanin func(results []interface{}) (interface{}, e
 	return f
 }
 
-func (f FanoutStage) Task() thread.Task {
+func (f FanoutStage) Task() threads.Task {
 	fan := fanouter.New(context.TODO(), f.tasks...)
 	return func(job interface{}) (interface{}, error) {
 		debugPrintf("stage `%s` FANNING-OUT\n", f.name)
@@ -51,7 +51,7 @@ func (f FanoutStage) Task() thread.Task {
 }
 
 // NewStage instantiates a new Stage with a single task and `numWorkersPerTask` goroutines
-func NewStage(name string, numWorkersPerTask thread.TaskForce, task thread.Task) Stage {
+func NewStage(name string, numWorkersPerTask threads.TaskForce, task threads.Task) Stage {
 	// Ignore nonsence arguments
 	// so we don't have to return error:
 	if numWorkersPerTask < 1 {
@@ -61,14 +61,14 @@ func NewStage(name string, numWorkersPerTask thread.TaskForce, task thread.Task)
 	return Stage{
 		name:              name,
 		numWorkersPerTask: numWorkersPerTask,
-		tasks:             []thread.Task{task},
+		tasks:             []threads.Task{task},
 		fanin:             defaultFanin,
 	}
 }
 
 // NewFanoutStage instantiates a new Stage with a multiple
 // tasks each running on `numWorkersPerTask` goroutines
-func NewFanoutStage(name string, numWorkersPerTask thread.TaskForce, tasks ...thread.Task) FanoutStage {
+func NewFanoutStage(name string, numWorkersPerTask threads.TaskForce, tasks ...threads.Task) FanoutStage {
 	// Ignore nonsence arguments
 	// so we don't have to return error:
 	if numWorkersPerTask < 1 {
@@ -90,7 +90,7 @@ func buildStageWorker(
 	stageName string,
 	inputCh chan interface{},
 	outputCh chan interface{},
-	task thread.Task,
+	task threads.Task,
 ) func() error {
 	return func() error {
 		var job interface{}

@@ -3,8 +3,8 @@ package fanouter
 import (
 	"context"
 
-	thread "github.com/vingarcia/go-pipeline"
-	"github.com/vingarcia/go-pipeline/workerpool"
+	"github.com/vingarcia/go-threads"
+	"github.com/vingarcia/go-threads/workerpool"
 )
 
 // Fan holds a set of workers that run concurrently
@@ -22,7 +22,7 @@ type Fan struct {
 }
 
 // New creates a new Fan instance
-func New(ctx context.Context, tasks ...thread.Task) Fan {
+func New(ctx context.Context, tasks ...threads.Task) Fan {
 	f := Fan{
 		ctx:       ctx,
 		jobs:      make(chan interface{}),
@@ -66,7 +66,7 @@ func fanoutWorker(
 	ctx context.Context,
 	jobs chan interface{},
 	batchesCh chan chan fanJob,
-	tasks []thread.Task,
+	tasks []threads.Task,
 	pool *workerpool.WorkerPool,
 ) func() error {
 	return func() error {

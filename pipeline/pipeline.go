@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	thread "github.com/vingarcia/go-pipeline"
+	"github.com/vingarcia/go-threads"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -17,7 +17,7 @@ var Debug = false
 // and when there are multiple tasks on a single stage they
 // process jobs concurrently among them
 type Pipeline struct {
-	stages []thread.Stage
+	stages []threads.Stage
 
 	started bool
 	Debug   bool
@@ -29,7 +29,7 @@ type Pipeline struct {
 // Each stage of this pipeline processes the jobs serially
 // and when there are multiple tasks on a single stage they
 // process jobs concurrently among them
-func New(stages ...thread.Stage) Pipeline {
+func New(stages ...threads.Stage) Pipeline {
 	return Pipeline{
 		stages: stages,
 	}

@@ -1,4 +1,4 @@
-module github.com/vingarcia/go-pipeline
+module github.com/vingarcia/go-threads
 
 go 1.14
 

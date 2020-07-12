@@ -32,8 +32,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/vingarcia/go-pipeline"
-	"github.com/vingarcia/go-pipeline/async"
+	"github.com/vingarcia/go-threads"
+	"github.com/vingarcia/go-threads/async"
 )
 
 func main() {

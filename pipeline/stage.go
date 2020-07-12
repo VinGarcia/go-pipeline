@@ -7,7 +7,7 @@ import (
 	"github.com/vingarcia/go-pipeline/fanouter"
 )
 
-type StageT struct {
+type Stage struct {
 	name  string
 	tasks []thread.Task
 	fanin func(results []interface{}) (interface{}, error)
@@ -15,20 +15,20 @@ type StageT struct {
 	numWorkersPerTask thread.TaskForce
 }
 
-func (s StageT) NumWorkersPerTask() int {
+func (s Stage) NumWorkersPerTask() int {
 	return int(s.numWorkersPerTask)
 }
 
-func (s StageT) Name() string {
+func (s Stage) Name() string {
 	return s.name
 }
 
-func (s StageT) Task() thread.Task {
+func (s Stage) Task() thread.Task {
 	return s.tasks[0]
 }
 
 type FanoutStage struct {
-	StageT
+	Stage
 }
 
 func (f FanoutStage) FaninRule(fanin func(results []interface{}) (interface{}, error)) FanoutStage {
@@ -51,14 +51,14 @@ func (f FanoutStage) Task() thread.Task {
 }
 
 // NewStage instantiates a new Stage with a single task and `numWorkersPerTask` goroutines
-func NewStage(name string, numWorkersPerTask thread.TaskForce, task thread.Task) StageT {
+func NewStage(name string, numWorkersPerTask thread.TaskForce, task thread.Task) Stage {
 	// Ignore nonsence arguments
 	// so we don't have to return error:
 	if numWorkersPerTask < 1 {
 		numWorkersPerTask = 1
 	}
 
-	return StageT{
+	return Stage{
 		name:              name,
 		numWorkersPerTask: numWorkersPerTask,
 		tasks:             []thread.Task{task},
@@ -76,7 +76,7 @@ func NewFanoutStage(name string, numWorkersPerTask thread.TaskForce, tasks ...th
 	}
 
 	return FanoutStage{
-		StageT{
+		Stage{
 			name:              name,
 			numWorkersPerTask: numWorkersPerTask,
 			tasks:             tasks,

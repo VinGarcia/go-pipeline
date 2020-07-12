@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/vingarcia/go-pipeline/fanouter"
+	thread "github.com/vingarcia/go-pipeline"
 	"golang.org/x/sync/errgroup"
 )
+
+var Debug = false
 
 // Pipeline organizes several goroutines to process a
 // number of user defined tasks in the form of a pipeline.
@@ -15,7 +17,7 @@ import (
 // and when there are multiple tasks on a single stage they
 // process jobs concurrently among them
 type Pipeline struct {
-	stages []Stage
+	stages []thread.Stage
 
 	started bool
 	Debug   bool
@@ -27,7 +29,7 @@ type Pipeline struct {
 // Each stage of this pipeline processes the jobs serially
 // and when there are multiple tasks on a single stage they
 // process jobs concurrently among them
-func New(stages ...Stage) Pipeline {
+func New(stages ...thread.Stage) Pipeline {
 	return Pipeline{
 		stages: stages,
 	}
@@ -55,24 +57,13 @@ func (p Pipeline) StartWithContext(ctx context.Context) error {
 		// nil on the first iteration:
 		inputCh := nextInputCh
 		outputCh := make(chan interface{})
+		// outputCh is nil on the last iteration:
+		if idx == len(p.stages)-1 {
+			outputCh = nil
+		}
 
 		for j := 0; j < int(stage.NumWorkersPerTask()); j++ {
-			switch stage := stage.(type) {
-			case StageT:
-				g.Go(stage.stageWorker(ctx, idx, p, inputCh, outputCh, stage.tasks[0]))
-			case FanoutStage:
-				fan := fanouter.New(ctx, stage.tasks...)
-				g.Go(stage.stageWorker(ctx, idx, p, inputCh, outputCh, func(job interface{}) (interface{}, error) {
-					p.debugPrintf("stage `%s` (n%d) FANNING-OUT\n", stage.name, idx)
-					jobs, err := fan.Fanout(job)
-					if err != nil {
-						return nil, err
-					}
-
-					p.debugPrintf("stage `%s` (n%d) FANNING-IN\n", stage.name, idx)
-					return stage.fanin(jobs)
-				}))
-			}
+			g.Go(buildStageWorker(ctx, idx, stage.Name(), inputCh, outputCh, stage.Task()))
 		}
 
 		// Create the input channel of the next stage:
@@ -82,8 +73,8 @@ func (p Pipeline) StartWithContext(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (p Pipeline) debugPrintf(format string, args ...interface{}) {
-	if p.Debug {
+func debugPrintf(format string, args ...interface{}) {
+	if Debug {
 		fmt.Printf(format, args...)
 	}
 }

@@ -3,37 +3,28 @@ package pipeline
 import (
 	"context"
 
-	"github.com/vingarcia/go-pipeline/async"
+	thread "github.com/vingarcia/go-pipeline"
+	"github.com/vingarcia/go-pipeline/fanouter"
 )
-
-// Stage describes an stage of the Pipeline
-//
-// Each stage of the pipeline processes the jobs serially
-// and when there are multiple tasks on a single stage they
-// process jobs concurrently among them
-type Stage interface {
-	stageWorker(
-		ctx context.Context,
-		stageIdx int,
-		pipe Pipeline,
-		inputCh chan interface{},
-		outputCh chan interface{},
-		task async.Task,
-	) func() error
-
-	NumWorkersPerTask() int
-}
 
 type StageT struct {
 	name  string
-	tasks []async.Task
+	tasks []thread.Task
 	fanin func(results []interface{}) (interface{}, error)
 
-	numWorkersPerTask async.TaskForce
+	numWorkersPerTask thread.TaskForce
 }
 
 func (s StageT) NumWorkersPerTask() int {
 	return int(s.numWorkersPerTask)
+}
+
+func (s StageT) Name() string {
+	return s.name
+}
+
+func (s StageT) Task() thread.Task {
+	return s.tasks[0]
 }
 
 type FanoutStage struct {
@@ -45,8 +36,22 @@ func (f FanoutStage) FaninRule(fanin func(results []interface{}) (interface{}, e
 	return f
 }
 
+func (f FanoutStage) Task() thread.Task {
+	fan := fanouter.New(context.TODO(), f.tasks...)
+	return func(job interface{}) (interface{}, error) {
+		debugPrintf("stage `%s` FANNING-OUT\n", f.name)
+		jobs, err := fan.Fanout(job)
+		if err != nil {
+			return nil, err
+		}
+
+		debugPrintf("stage `%s` FANNING-IN\n", f.name)
+		return f.fanin(jobs)
+	}
+}
+
 // NewStage instantiates a new Stage with a single task and `numWorkersPerTask` goroutines
-func NewStage(name string, numWorkersPerTask async.TaskForce, task async.Task) StageT {
+func NewStage(name string, numWorkersPerTask thread.TaskForce, task thread.Task) StageT {
 	// Ignore nonsence arguments
 	// so we don't have to return error:
 	if numWorkersPerTask < 1 {
@@ -56,14 +61,14 @@ func NewStage(name string, numWorkersPerTask async.TaskForce, task async.Task) S
 	return StageT{
 		name:              name,
 		numWorkersPerTask: numWorkersPerTask,
-		tasks:             []async.Task{task},
+		tasks:             []thread.Task{task},
 		fanin:             defaultFanin,
 	}
 }
 
 // NewFanoutStage instantiates a new Stage with a multiple
 // tasks each running on `numWorkersPerTask` goroutines
-func NewFanoutStage(name string, numWorkersPerTask async.TaskForce, tasks ...async.Task) FanoutStage {
+func NewFanoutStage(name string, numWorkersPerTask thread.TaskForce, tasks ...thread.Task) FanoutStage {
 	// Ignore nonsence arguments
 	// so we don't have to return error:
 	if numWorkersPerTask < 1 {
@@ -79,19 +84,19 @@ func NewFanoutStage(name string, numWorkersPerTask async.TaskForce, tasks ...asy
 	}
 }
 
-func (stage StageT) stageWorker(
+func buildStageWorker(
 	ctx context.Context,
 	stageIdx int,
-	pipe Pipeline,
+	stageName string,
 	inputCh chan interface{},
 	outputCh chan interface{},
-	task async.Task,
+	task thread.Task,
 ) func() error {
 	return func() error {
 		var job interface{}
 		for {
-			if stageIdx > 0 {
-				pipe.debugPrintf("stage `%s` (n%d) reading from %v\n", stage.name, stageIdx, inputCh)
+			if inputCh != nil {
+				debugPrintf("stage `%s` (n%d) reading from %v\n", stageName, stageIdx, inputCh)
 				job = <-inputCh
 			}
 
@@ -100,13 +105,10 @@ func (stage StageT) stageWorker(
 				return err
 			}
 
-			// The last stage doesn't write anything
-			if stageIdx == len(pipe.stages)-1 {
-				continue
+			if outputCh != nil {
+				debugPrintf("stage `%s` (n%d) writing to %v\n", stageName, stageIdx, outputCh)
+				outputCh <- resp
 			}
-
-			pipe.debugPrintf("stage `%s` (n%d) writing to %v\n", stage.name, stageIdx, outputCh)
-			outputCh <- resp
 		}
 	}
 }

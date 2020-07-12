@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/vingarcia/go-pipeline"
-	"github.com/vingarcia/go-pipeline/async"
+	thread "github.com/vingarcia/go-pipeline"
+	p "github.com/vingarcia/go-pipeline/pipeline"
 )
 
 func main() {
@@ -20,8 +20,9 @@ func main() {
 	startTime := time.Now()
 	jobsProcessed := 0
 
-	pipeline := pipeline.New(
-		pipeline.NewStage("loading", async.TaskForce(1), func(_ interface{}) (interface{}, error) {
+	p.Debug = true
+	pipeline := p.New(
+		p.NewStage("loading", thread.TaskForce(1), func(_ interface{}) (interface{}, error) {
 			time.Sleep(100 * time.Millisecond)
 
 			job := msgGenerator()
@@ -32,7 +33,7 @@ func main() {
 		}),
 
 		// Fan-out with 2 tasks:
-		pipeline.NewFanoutStage("save-and-dedup", async.TaskForce(1),
+		p.NewFanoutStage("save-and-dedup", thread.TaskForce(1),
 			func(job interface{}) (interface{}, error) {
 				fmt.Println("deduping", job)
 				return job.(string) + " deduped", nil
@@ -45,7 +46,7 @@ func main() {
 			return results[0], nil
 		}),
 
-		pipeline.NewStage("rate-control", async.TaskForce(1), func(job interface{}) (interface{}, error) {
+		p.NewStage("rate-control", thread.TaskForce(1), func(job interface{}) (interface{}, error) {
 
 			<-limiter
 
@@ -63,7 +64,7 @@ func main() {
 			return job, nil
 		}),
 
-		pipeline.NewStage("sending", async.TaskForce(3), func(job interface{}) (interface{}, error) {
+		p.NewStage("sending", thread.TaskForce(3), func(job interface{}) (interface{}, error) {
 			time.Sleep(300 * time.Millisecond)
 
 			fmt.Printf("Sending message `%s`\n", job.(string))
@@ -72,7 +73,6 @@ func main() {
 		}),
 	)
 
-	pipeline.Debug = true
 	err := pipeline.Start()
 	if err != nil {
 		fmt.Println(err, err.Error())

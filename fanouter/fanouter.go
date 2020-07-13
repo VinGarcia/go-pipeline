@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/vingarcia/go-threads"
-	"github.com/vingarcia/go-threads/workerpool"
+	"github.com/vingarcia/go-threads/pool"
 )
 
 // Fan holds a set of workers that run concurrently
@@ -12,7 +12,7 @@ import (
 type Fan struct {
 	ctx context.Context
 
-	pool *workerpool.WorkerPool
+	pool *pool.Pool
 
 	jobs      chan interface{}
 	batchesCh chan chan fanJob
@@ -31,7 +31,7 @@ func New(ctx context.Context, tasks ...threads.Task) Fan {
 	}
 
 	// Start the actual workers:
-	f.pool = workerpool.NewWorkerPool(f.ctx, len(tasks)+2)
+	f.pool = pool.New(f.ctx, len(tasks)+2)
 	// Start the worker responsible for distributing the jobs:
 	f.pool.Go(fanoutWorker(f.ctx, f.jobs, f.batchesCh, tasks, f.pool))
 	// Start the worker responsible for collecting the results:
@@ -67,7 +67,7 @@ func fanoutWorker(
 	jobs chan interface{},
 	batchesCh chan chan fanJob,
 	tasks []threads.Task,
-	pool *workerpool.WorkerPool,
+	pool *pool.Pool,
 ) func() error {
 	return func() error {
 		var job interface{}

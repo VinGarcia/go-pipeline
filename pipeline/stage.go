@@ -21,7 +21,7 @@ func (s Stage) GetName() string {
 	return s.Name
 }
 
-func (s Stage) GetWorker() threads.Task {
+func (s Stage) BuildWorker(ctx context.Context) threads.Task {
 	return s.Task
 }
 
@@ -40,7 +40,7 @@ func (f FanoutStage) GetName() string {
 	return f.Name
 }
 
-func (f FanoutStage) GetWorker() threads.Task {
+func (f FanoutStage) BuildWorker(ctx context.Context) threads.Task {
 	if f.ThreadsPerTask < 1 {
 		f.ThreadsPerTask = 1
 	}
@@ -48,7 +48,7 @@ func (f FanoutStage) GetWorker() threads.Task {
 		f.FaninRule = defaultFanin
 	}
 
-	fan := fanouter.New(context.TODO(), f.Tasks...)
+	fan := fanouter.New(ctx, f.Tasks...)
 	return func(job interface{}) (interface{}, error) {
 		debugPrintf("stage `%s` FANNING-OUT\n", f.Name)
 		jobs, err := fan.Fanout(job)

@@ -29,5 +29,5 @@ type Pipeline interface {
 type Stage interface {
 	GetName() string
 	NumThreads() int
-	GetWorker() Task
+	BuildWorker(ctx context.Context) Task
 }

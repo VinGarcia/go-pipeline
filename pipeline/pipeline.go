@@ -63,7 +63,7 @@ func (p Pipeline) StartWithContext(ctx context.Context) error {
 		}
 
 		for j := 0; j < int(stage.NumThreads()); j++ {
-			g.Go(buildStageWorker(ctx, idx, stage.GetName(), inputCh, outputCh, stage.GetWorker()))
+			g.Go(buildStageWorker(ctx, idx, stage.GetName(), inputCh, outputCh, stage.BuildWorker(ctx)))
 		}
 
 		// Create the input channel of the next stage:
